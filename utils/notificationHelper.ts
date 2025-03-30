@@ -3,86 +3,89 @@ import * as Device from "expo-device"
 import { Platform } from "react-native"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 
-// Configure notification categories/channels for Android
 export const setupNotificationChannels = async () => {
   if (Platform.OS === "android") {
-    // High priority channel for critical alerts
     await Notifications.setNotificationChannelAsync("critical-alerts", {
       name: "Critical Alerts",
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: "#FF0000",
-      sound: "default",
+      sound: true,
       enableVibrate: true,
       showBadge: true,
     })
 
-    // Medium priority channel for standard alerts
     await Notifications.setNotificationChannelAsync("standard-alerts", {
       name: "Standard Alerts",
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      sound: "default",
+      sound: true,
       enableVibrate: true,
       showBadge: true,
     })
 
-    // Low priority channel for informational alerts
     await Notifications.setNotificationChannelAsync("info-alerts", {
       name: "Informational Alerts",
       importance: Notifications.AndroidImportance.DEFAULT,
-      sound: "default",
+      sound: true,
       enableVibrate: false,
       showBadge: true,
     })
 
-    // Background channel for persistent notifications
     await Notifications.setNotificationChannelAsync("background", {
       name: "Background Alerts",
       importance: Notifications.AndroidImportance.LOW,
-      sound: null,
+      sound: false,
       enableVibrate: false,
       showBadge: false,
     })
   }
 }
 
-// Request notification permissions
 export const requestNotificationPermissions = async () => {
-  if (Device.isDevice) {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync()
-    let finalStatus = existingStatus
+  try {
+    if (Device.isDevice) {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync()
+      let finalStatus = existingStatus
 
-    if (existingStatus !== "granted") {
-      const { status } = await Notifications.requestPermissionsAsync()
-      finalStatus = status
+      if (existingStatus !== "granted") {
+        try {
+          const { status } = await Notifications.requestPermissionsAsync()
+          finalStatus = status
+        } catch (error) {
+          console.log("Error requesting notification permissions:", error)
+          return false
+        }
+      }
+
+      try {
+        await AsyncStorage.setItem("notificationPermission", finalStatus)
+      } catch (error) {
+        console.log("Error storing notification permission status:", error)
+      }
+
+      if (finalStatus !== "granted") {
+        return false
+      }
+
+      if (Platform.OS === "android") {
+        try {
+          await setupNotificationChannels()
+        } catch (error) {
+          console.log("Error setting up notification channels:", error)
+        }
+      }
+
+      return true
     }
-
-    // Store permission status
-    await AsyncStorage.setItem("notificationPermission", finalStatus)
-
-    if (finalStatus !== "granted") {
-      return false
-    }
-
-    // Set up notification channels for Android
-    if (Platform.OS === "android") {
-      await setupNotificationChannels()
-    }
-
-    return true
+  } catch (error) {
+    console.log("Error in requestNotificationPermissions:", error)
   }
 
   return false
 }
 
-// Send a notification with the appropriate channel based on severity
-export const sendNotification = async (
-  title: string,
-  body: string,
-  data: any,
-  severity: "high" | "medium" | "low" = "medium"
-) => {
+export const sendNotification = async (title, body, data, severity = "medium") => {
   let channelId = "standard-alerts"
 
   if (Platform.OS === "android") {
@@ -105,8 +108,7 @@ export const sendNotification = async (
   })
 }
 
-// Send a background notification
-export const sendBackgroundNotification = async (title: string, body: string) => {
+export const sendBackgroundNotification = async (title, body) => {
   return await Notifications.scheduleNotificationAsync({
     content: {
       title,
@@ -118,13 +120,11 @@ export const sendBackgroundNotification = async (title: string, body: string) =>
   })
 }
 
-// Cancel all notifications
 export const cancelAllNotifications = async () => {
   await Notifications.cancelAllScheduledNotificationsAsync()
 }
 
-// Handle notification response with navigation ref
-export const handleNotificationResponse = (response: any, navigationRef: any) => {
+export const handleNotificationResponse = (response, navigationRef) => {
   if (!navigationRef || !navigationRef.current) {
     console.log("Navigation ref is not available")
     return

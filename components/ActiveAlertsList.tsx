@@ -14,19 +14,7 @@ type ActiveAlertsListProps = {
   refreshing: boolean
 }
 
-const AlertItem = memo(({
-  item,
-  onAlertPress,
-  preferences,
-  renderAlertIcon,
-  formatTimeAgo
-}: {
-  item: any;
-  onAlertPress: any;
-  preferences: any;
-  renderAlertIcon: any;
-  formatTimeAgo: any
-}) => {
+const AlertItem = memo(({ item, onAlertPress, preferences, renderAlertIcon, formatTimeAgo }) => {
   const [fadeAnim] = useState(new Animated.Value(0))
 
   useEffect(() => {
@@ -91,7 +79,7 @@ export default function ActiveAlertsList({
 }: ActiveAlertsListProps) {
   const { preferences } = usePreferences()
 
-  const renderAlertIcon = useCallback((type: string) => {
+  const renderAlertIcon = useCallback((type) => {
     switch (type.toLowerCase()) {
       case "earthquake":
         return <Ionicons name="earth" size={24} color="#D32F2F" />
@@ -116,10 +104,10 @@ export default function ActiveAlertsList({
     }
   }, [])
 
-  const formatTimeAgo = useCallback((timestamp: number) => {
+  const formatTimeAgo = useCallback((timestamp) => {
     const now = new Date()
     const alertTime = new Date(timestamp)
-    const diffInSeconds = Math.floor((now.getTime() - alertTime.getTime()) / 1000)
+    const diffInSeconds = Math.floor((now - alertTime) / 1000)
 
     if (diffInSeconds < 60) {
       return `${diffInSeconds}s ago`

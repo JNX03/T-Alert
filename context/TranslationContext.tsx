@@ -27,6 +27,7 @@ const enTranslations = {
   minutes_ago: "m ago",
   no_alerts: "No active alerts in your area",
   pull_to_refresh: "Pull down to refresh",
+  location_permission_denied: "Permission to access location was denied",
   notif: "Notif",
   no_notif: "No Notif",
   loc: "Loc",
@@ -85,11 +86,10 @@ const enTranslations = {
   test_storm: "Test Storm Alert",
   test_info:
     "Test alerts are for demonstration purposes only and do not represent real emergency situations. They will be automatically removed when you restart the app.",
-    retry_location: "Retry Location Access",
-    using_default_location: "Using default location (Bangkok). Enable location for local alerts.",
-    location_permission_error: "Error accessing location. Using default location.",
-    location_permission_denied: "Location permission denied. Some features may be limited.",
-    map_error: "Error loading map. Please try again.",
+  location_error: "Unable to get your location. Using default location.",
+  using_default_location: "Using default location (Bangkok).",
+  map_error: "There was a problem loading the map. Please check your internet connection.",
+  location_permission_error: "There was a problem with location permissions.",
 }
 
 const thTranslations = {
@@ -105,6 +105,7 @@ const thTranslations = {
   minutes_ago: " นาทีที่แล้ว",
   no_alerts: "ไม่มีการแจ้งเตือนที่ใช้งานอยู่ในพื้นที่ของคุณ",
   pull_to_refresh: "ดึงลงเพื่อรีเฟรช",
+  location_permission_denied: "การเข้าถึงตำแหน่งถูกปฏิเสธ",
   notif: "แจ้งเตือน",
   no_notif: "ไม่มีแจ้งเตือน",
   loc: "ตำแหน่ง",
@@ -163,11 +164,11 @@ const thTranslations = {
   test_storm: "ทดสอบการแจ้งเตือนพายุ",
   test_info:
     "การแจ้งเตือนทดสอบมีไว้เพื่อการสาธิตเท่านั้นและไม่ได้แสดงถึงสถานการณ์ฉุกเฉินจริง การแจ้งเตือนเหล่านี้จะถูกลบโดยอัตโนมัติเมื่อคุณรีสตาร์ทแอพ",
-    retry_location: "ลองขอตำแหน่งอีกครั้ง",
-    using_default_location: "ใช้ตำแหน่งเริ่มต้น (กรุงเทพฯ) เปิดใช้งานตำแหน่งเพื่อรับการแจ้งเตือนในพื้นที่",
-    location_permission_error: "เกิดข้อผิดพลาดในการเข้าถึงตำแหน่ง กำลังใช้ตำแหน่งเริ่มต้น",
-    location_permission_denied: "การเข้าถึงตำแหน่งถูกปฏิเสธ บางคุณสมบัติอาจถูกจำกัด",
-    map_error: "เกิดข้อผิดพลาดในการโหลดแผนที่ โปรดลองอีกครั้ง",
+
+  location_error: "ไม่สามารถรับตำแหน่งของคุณได้ กำลังใช้ตำแหน่งเริ่มต้น",
+  using_default_location: "กำลังใช้ตำแหน่งเริ่มต้น (กรุงเทพฯ)",
+  map_error: "มีปัญหาในการโหลดแผนที่ โปรดตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณ",
+  location_permission_error: "มีปัญหาเกี่ยวกับสิทธิ์การเข้าถึงตำแหน่ง",
 }
 
 const translations = {

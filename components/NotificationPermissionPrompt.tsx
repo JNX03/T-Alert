@@ -27,8 +27,10 @@ const NotificationPermissionPrompt = ({ theme }: NotificationPermissionPromptPro
       if (hasPromptedBefore === "true") {
         setHasPrompted(true)
       }
+
       const { status } = await Notifications.getPermissionsAsync()
       setPermissionStatus(status)
+
       if (status !== "granted" && hasPromptedBefore !== "true") {
         setVisible(true)
       }
@@ -42,6 +44,7 @@ const NotificationPermissionPrompt = ({ theme }: NotificationPermissionPromptPro
       const granted = await requestNotificationPermissions()
       setPermissionStatus(granted ? "granted" : "denied")
       setVisible(false)
+
       await AsyncStorage.setItem("notificationPrompted", "true")
       setHasPrompted(true)
     } catch (error) {

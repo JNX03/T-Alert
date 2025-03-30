@@ -262,7 +262,6 @@ export default function EmergencyContactsScreen() {
         <Ionicons name="add" size={24} color="white" />
       </TouchableOpacity>
 
-      {/* Add Contact Modal */}
       <Modal
         animationType="slide"
         transparent={true}

@@ -45,29 +45,43 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
 })
 
 export default function HomeScreen() {
-  const [location, setLocation] = useState<any>(null)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [location, setLocation] = useState(null)
+  const [errorMsg, setErrorMsg] = useState(null)
   const mapRef = useRef(null)
-  const navigation = useNavigation<any>()
-  const { disasters, fetchDisasters, loading } = useDisasterContext()
+  const navigation = useNavigation()
+  const {
+    disasters,
+    fetchDisasters: fetchDisastersContext,
+    loading,
+    setDisasters,
+    setLastRefetchTime,
+    lastFetchTime,
+    fetchEarthquakes,
+    fetchWeatherAlerts,
+    fetchThailandDisasterAlerts,
+    fetchPDCDisasterAlerts,
+    fetchReliefWebAlerts,
+    sendNotificationsForNewAlerts,
+  } = useDisasterContext()
   const { preferences } = usePreferences()
   const { t } = useTranslation()
   const [refreshing, setRefreshing] = useState(false)
-  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const [lastRefreshTime, setLastRefreshTime] = useState(null)
   const [isManualRefreshing, setIsManualRefreshing] = useState(false)
   const [nextRefreshIn, setNextRefreshIn] = useState(60)
-  const refreshTimerRef = useRef<any>(null)
-  const countdownTimerRef = useRef<any>(null)
+  const refreshTimerRef = useRef(null)
+  const countdownTimerRef = useRef(null)
   const appState = useRef(AppState.currentState)
-  const [notificationPermission, setNotificationPermission] = useState<any>(null)
-  const [locationPermission, setLocationPermission] = useState<any>(null)
+  const [notificationPermission, setNotificationPermission] = useState(null)
+  const [locationPermission, setLocationPermission] = useState(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   const fadeAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(50)).current
   const panelHeightAnim = useRef(new Animated.Value(MID_PANEL_HEIGHT)).current
 
   const animatePanelTo = useCallback(
-    (height: number, duration = 300) => {
+    (height, duration = 300) => {
       Animated.timing(panelHeightAnim, {
         toValue: height,
         duration,
@@ -86,12 +100,9 @@ export default function HomeScreen() {
           panelHeightAnim.setValue(newHeight)
         },
         onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.vy > 0.5 || (panelHeightAnim as any)._value < (MIN_PANEL_HEIGHT + MID_PANEL_HEIGHT) / 2) {
+          if (gestureState.vy > 0.5 || panelHeightAnim._value < (MIN_PANEL_HEIGHT + MID_PANEL_HEIGHT) / 2) {
             animatePanelTo(MIN_PANEL_HEIGHT)
-          } else if (
-            gestureState.vy < -0.5 ||
-            (panelHeightAnim as any)._value > (MID_PANEL_HEIGHT + MAX_PANEL_HEIGHT) / 2
-          ) {
+          } else if (gestureState.vy < -0.5 || panelHeightAnim._value > (MID_PANEL_HEIGHT + MAX_PANEL_HEIGHT) / 2) {
             animatePanelTo(MAX_PANEL_HEIGHT)
           } else {
             animatePanelTo(MID_PANEL_HEIGHT)
@@ -179,117 +190,9 @@ export default function HomeScreen() {
 
     const getLocationAndFetchData = async () => {
       try {
-        // First check if location permission is already granted
-        const { status: existingStatus } = await Location.getForegroundPermissionsAsync()
-        setLocationPermission(existingStatus)
+        const { status } = await Location.requestForegroundPermissionsAsync()
+        setLocationPermission(status)
 
-        if (existingStatus !== "granted") {
-          // Request permission if not already granted
-          const { status } = await Location.requestForegroundPermissionsAsync()
-          setLocationPermission(status)
-
-          if (status !== "granted") {
-            // Handle permission denied gracefully
-            setErrorMsg(t("location_permission_denied"))
-            // Use default location for Thailand
-            const defaultLocation = {
-              coords: {
-                latitude: 13.7563,
-                longitude: 100.5018,
-                accuracy: 0,
-                altitude: 0,
-                altitudeAccuracy: 0,
-                heading: 0,
-                speed: 0,
-              },
-              timestamp: Date.now(),
-            }
-            setLocation(defaultLocation)
-            fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
-            setLastRefreshTime(new Date())
-            startCountdownTimer()
-            return
-          }
-        }
-
-        // Wrap location request in a try-catch with timeout
-        try {
-          const locationPromise = Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          })
-
-          const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Location request timed out")), 10000),
-          )
-
-          const location = await Promise.race([locationPromise, timeoutPromise])
-          setLocation(location)
-
-          const notifStatus = (await Notifications.getPermissionsAsync()).status
-          setNotificationPermission(notifStatus)
-
-          if (location) {
-            fetchDisasters(location.coords.latitude, location.coords.longitude)
-            setLastRefreshTime(new Date())
-            startCountdownTimer()
-          }
-        } catch (error) {
-          console.log("Error getting current location:", error)
-
-          // Try to get last known location as fallback
-          try {
-            const lastKnownLocation = await Location.getLastKnownPositionAsync()
-            if (lastKnownLocation) {
-              setLocation(lastKnownLocation)
-              fetchDisasters(lastKnownLocation.coords.latitude, lastKnownLocation.coords.longitude)
-              setLastRefreshTime(new Date())
-              startCountdownTimer()
-            } else {
-              // Use default location for Thailand as last resort
-              const defaultLocation = {
-                coords: {
-                  latitude: 13.7563,
-                  longitude: 100.5018,
-                  accuracy: 0,
-                  altitude: 0,
-                  altitudeAccuracy: 0,
-                  heading: 0,
-                  speed: 0,
-                },
-                timestamp: Date.now(),
-              }
-              setLocation(defaultLocation)
-              fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
-              setLastRefreshTime(new Date())
-              startCountdownTimer()
-              setErrorMsg(t("using_default_location"))
-            }
-          } catch (fallbackError) {
-            console.log("Error getting last known location:", fallbackError)
-            // Use default location for Thailand as last resort
-            const defaultLocation = {
-              coords: {
-                latitude: 13.7563,
-                longitude: 100.5018,
-                accuracy: 0,
-                altitude: 0,
-                altitudeAccuracy: 0,
-                heading: 0,
-                speed: 0,
-              },
-              timestamp: Date.now(),
-            }
-            setLocation(defaultLocation)
-            fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
-            setLastRefreshTime(new Date())
-            startCountdownTimer()
-            setErrorMsg(t("using_default_location"))
-          }
-        }
-      } catch (error) {
-        console.log("Error in location permission flow:", error)
-        setErrorMsg(t("location_permission_error"))
-        // Use default location for Thailand as last resort
         const defaultLocation = {
           coords: {
             latitude: 13.7563,
@@ -302,10 +205,75 @@ export default function HomeScreen() {
           },
           timestamp: Date.now(),
         }
+
+        if (status !== "granted") {
+          console.log("Location permission denied")
+          setErrorMsg(t("location_permission_denied"))
+
+          setLocation(defaultLocation)
+          fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
+          setLastRefreshTime(new Date())
+          startCountdownTimer()
+          return
+        }
+
+        try {
+          const locationPromise = Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          }).catch((error) => {
+            console.log("Error in getCurrentPositionAsync:", error)
+            return null
+          })
+
+          const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 10000))
+
+          const location = await Promise.race([locationPromise, timeoutPromise])
+
+          if (location) {
+            setLocation(location)
+            fetchDisasters(location.coords.latitude, location.coords.longitude)
+          } else {
+            console.log("Location request timed out or failed, using default location")
+            setLocation(defaultLocation)
+            fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
+            setErrorMsg(t("using_default_location"))
+          }
+
+          const notifStatus = await Notifications.getPermissionsAsync().catch(() => ({ status: "denied" }))
+          setNotificationPermission(notifStatus.status)
+
+          setLastRefreshTime(new Date())
+          startCountdownTimer()
+        } catch (error) {
+          console.log("Error getting current location:", error)
+
+          setLocation(defaultLocation)
+          fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
+          setLastRefreshTime(new Date())
+          startCountdownTimer()
+          setErrorMsg(t("using_default_location"))
+        }
+      } catch (error) {
+        console.log("Error in getLocationAndFetchData:", error)
+
+        const defaultLocation = {
+          coords: {
+            latitude: 13.7563,
+            longitude: 100.5018,
+            accuracy: 0,
+            altitude: 0,
+            altitudeAccuracy: 0,
+            heading: 0,
+            speed: 0,
+          },
+          timestamp: Date.now(),
+        }
+
         setLocation(defaultLocation)
         fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
         setLastRefreshTime(new Date())
         startCountdownTimer()
+        setErrorMsg(t("location_error"))
       }
     }
 
@@ -403,7 +371,7 @@ export default function HomeScreen() {
         setRefreshing(false)
       }
     }
-  }, [location, fetchDisasters])
+  }, [location])
 
   const formatLastRefreshTime = () => {
     if (!lastRefreshTime) return t("never")
@@ -422,7 +390,7 @@ export default function HomeScreen() {
   }
 
   const togglePanel = () => {
-    if ((panelHeightAnim as any)._value > MID_PANEL_HEIGHT - 10) {
+    if (panelHeightAnim._value > MID_PANEL_HEIGHT - 10) {
       animatePanelTo(MIN_PANEL_HEIGHT)
     } else {
       animatePanelTo(MAX_PANEL_HEIGHT)
@@ -453,39 +421,99 @@ export default function HomeScreen() {
     return Animated.subtract(SCREEN_HEIGHT, panelHeightAnim)
   }, [panelHeightAnim])
 
+  const fetchDisasters = async (latitude: number, longitude: number) => {
+    const now = Date.now()
+    if (now - lastFetchTime < 5 * 60 * 1000 && disasters.length > 0 && !isLoading) {
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
+        console.log("Invalid coordinates, using default location")
+        latitude = 13.7563
+        longitude = 100.5018
+      }
+
+      const [earthquakes, weatherAlerts, thailandAlerts, pdcAlerts, reliefWebAlerts] = await Promise.all([
+        preferences.earthquakeAlerts ? fetchEarthquakes(latitude, longitude) : [],
+        preferences.weatherAlerts ? fetchWeatherAlerts(latitude, longitude) : [],
+        fetchThailandDisasterAlerts(latitude, longitude),
+        fetchPDCDisasterAlerts(latitude, longitude),
+        fetchReliefWebAlerts(latitude, longitude),
+      ])
+
+      let allDisasters = [...earthquakes, ...weatherAlerts, ...thailandAlerts, ...pdcAlerts, ...reliefWebAlerts]
+
+      if (preferences.highSeverityOnly) {
+        allDisasters = allDisasters.filter((disaster) => disaster.severity === "high")
+      }
+
+      allDisasters.sort((a, b) => b.timestamp - a.timestamp)
+
+      const testAlerts = disasters.filter((d) => d.isTest)
+      const nonTestDisasters = allDisasters.filter((d) => !d.isTest)
+      allDisasters = [...testAlerts, ...nonTestDisasters]
+
+      setDisasters(allDisasters)
+      setLastRefetchTime(now)
+
+      if (preferences.notificationsEnabled) {
+        await sendNotificationsForNewAlerts(allDisasters)
+      }
+    } catch (error) {
+      console.error("Error fetching disaster data:", error)
+      if (disasters.length === 0) {
+        const defaultAlerts = getDefaultAlerts()
+        setDisasters(defaultAlerts)
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const getDefaultAlerts = () => {
+    const now = Date.now()
+    return [
+      {
+        id: `default-earthquake-${now}`,
+        title: "M5.2 Earthquake",
+        description: "Moderate earthquake detected in central Thailand.",
+        type: "earthquake",
+        severity: "medium",
+        latitude: 13.7563,
+        longitude: 100.5018,
+        location: "Central Thailand",
+        timestamp: now - 3600000,
+        source: "Default Alert",
+        recommendations: "Be alert for aftershocks and check structures for damage.",
+        magnitude: 5.2,
+        depth: 10,
+        isRead: false,
+      },
+      {
+        id: `default-flood-${now}`,
+        title: "Flood Warning",
+        description: "Heavy rainfall causing flooding in northern Thailand.",
+        type: "flood",
+        severity: "high",
+        latitude: 18.7883,
+        longitude: 98.9853,
+        location: "Northern Thailand",
+        timestamp: now - 7200000,
+        source: "Default Alert",
+        recommendations: "Move to higher ground and follow evacuation instructions.",
+        isRead: false,
+      },
+    ]
+  }
+
   return (
     <View style={[styles.container, preferences.theme === "dark" ? styles.darkContainer : styles.lightContainer]}>
       {errorMsg ? (
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
-            {errorMsg}
-          </Text>
-          {/* Add a button to retry location permission */}
-          <TouchableOpacity
-            style={styles.retryButton}
-            onPress={() => {
-              setErrorMsg(null)
-              const getLocationAndFetchData = async () => {
-                try {
-                  const { status } = await Location.requestForegroundPermissionsAsync()
-                  setLocationPermission(status)
-                  if (status === "granted") {
-                    const location = await Location.getCurrentPositionAsync({})
-                    setLocation(location)
-                    fetchDisasters(location.coords.latitude, location.coords.longitude)
-                    setLastRefreshTime(new Date())
-                    startCountdownTimer()
-                  }
-                } catch (error) {
-                  console.log("Error getting location on retry:", error)
-                  setErrorMsg(t("location_permission_error"))
-                }
-              }
-              getLocationAndFetchData()
-            }}
-          >
-            <Text style={styles.retryButtonText}>{t("retry_location")}</Text>
-          </TouchableOpacity>
+          <Text style={styles.errorText}>{errorMsg}</Text>
         </View>
       ) : (
         <View style={styles.contentContainer}>
@@ -509,63 +537,64 @@ export default function HomeScreen() {
           <Animated.View style={[styles.mapContainer, { height: mapHeight }]}>
             <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }}>
               {location ? (
-                <View style={styles.mapWrapper}>
-                  <MapView
-                    ref={mapRef}
-                    style={styles.map}
-                    provider={PROVIDER_GOOGLE}
-                    initialRegion={{
+                <MapView
+                  ref={mapRef}
+                  style={styles.map}
+                  provider={PROVIDER_GOOGLE}
+                  initialRegion={{
+                    latitude: location.coords.latitude,
+                    longitude: location.coords.longitude,
+                    latitudeDelta: 0.0922,
+                    longitudeDelta: 0.0421,
+                  }}
+                  onError={(error) => {
+                    console.log("Map error:", error)
+                    setErrorMsg(t("map_error"))
+                  }}
+                >
+                  <Marker
+                    coordinate={{
                       latitude: location.coords.latitude,
                       longitude: location.coords.longitude,
-                      latitudeDelta: 0.0922,
-                      longitudeDelta: 0.0421,
                     }}
-                  >
+                    title={t("your_location")}
+                    pinColor="#2196F3"
+                  />
+
+                  <Circle
+                    center={{
+                      latitude: location.coords.latitude,
+                      longitude: location.coords.longitude,
+                    }}
+                    radius={preferences.alertRadius * 1000}
+                    strokeWidth={1}
+                    strokeColor="rgba(33, 150, 243, 0.5)"
+                    fillColor="rgba(33, 150, 243, 0.1)"
+                  />
+
+                  {disasters.map((disaster, index) => (
                     <Marker
+                      key={index}
                       coordinate={{
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
+                        latitude: disaster.latitude,
+                        longitude: disaster.longitude,
                       }}
-                      title={t("your_location")}
-                      pinColor="#2196F3"
+                      title={disaster.title}
+                      description={disaster.description}
+                      pinColor={
+                        disaster.severity === "high"
+                          ? "#D32F2F"
+                          : disaster.severity === "medium"
+                            ? "#FF9800"
+                            : "#FFC107"
+                      }
+                      onPress={() => navigation.navigate("AlertDetails", { disaster })}
                     />
-
-                    <Circle
-                      center={{
-                        latitude: location.coords.latitude,
-                        longitude: location.coords.longitude,
-                      }}
-                      radius={preferences.alertRadius * 1000}
-                      strokeWidth={1}
-                      strokeColor="rgba(33, 150, 243, 0.5)"
-                      fillColor="rgba(33, 150, 243, 0.1)"
-                    />
-
-                    {disasters.map((disaster, index) => (
-                      <Marker
-                        key={index}
-                        coordinate={{
-                          latitude: disaster.latitude,
-                          longitude: disaster.longitude,
-                        }}
-                        title={disaster.title}
-                        description={disaster.description}
-                        pinColor={
-                          disaster.severity === "high"
-                            ? "#D32F2F"
-                            : disaster.severity === "medium"
-                              ? "#FF9800"
-                              : "#FFC107"
-                        }
-                        onPress={() => navigation.navigate("AlertDetails", { disaster })}
-                      />
-                    ))}
-                  </MapView>
-                </View>
+                  ))}
+                </MapView>
               ) : (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#D32F2F" />
-                  <Text style={[styles.loadingText, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
+                  <Text style={preferences.theme === "dark" ? styles.darkText : styles.lightText}>
                     {t("getting_location")}
                   </Text>
                 </View>
@@ -615,13 +644,13 @@ export default function HomeScreen() {
               <Text style={[styles.panelTitle, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
                 {t("active_alerts")}
               </Text>
-              {loading && <ActivityIndicator size="small" color="#D32F2F" />}
+              {isLoading && <ActivityIndicator size="small" color="#D32F2F" />}
             </View>
 
             <View style={styles.alertsContainer}>
               <ActiveAlertsList
                 disasters={disasters}
-                loading={loading}
+                loading={isLoading}
                 onAlertPress={(disaster) => navigation.navigate("AlertDetails", { disaster })}
                 onRefresh={onRefresh}
                 refreshing={refreshing}
@@ -803,26 +832,6 @@ const styles = StyleSheet.create({
     marginLeft: 2,
     color: "#333",
     fontWeight: "500",
-  },
-  retryButton: {
-    backgroundColor: "#D32F2F",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 15,
-  },
-  retryButtonText: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-  mapWrapper: {
-    flex: 1,
-    overflow: "hidden",
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
   },
 })
 

@@ -7,17 +7,14 @@ import { Ionicons } from "@expo/vector-icons"
 type EmergencyButtonProps = {
   onPress: () => void
   label: string
-  icon: any // Change from string to any
+  icon: string
   color?: string
   size?: "small" | "medium" | "large"
   theme: "light" | "dark"
 }
 
 const EmergencyButton = ({ onPress, label, icon, color = "#D32F2F", size = "medium", theme }: EmergencyButtonProps) => {
-  // Create animated value for pulse effect
   const pulseAnim = React.useRef(new Animated.Value(1)).current
-
-  // Start pulse animation on mount
   React.useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -37,7 +34,6 @@ const EmergencyButton = ({ onPress, label, icon, color = "#D32F2F", size = "medi
     ).start()
   }, [])
 
-  // Determine button size
   const buttonSize = {
     small: { width: 100, height: 40, iconSize: 16, fontSize: 12 },
     medium: { width: 140, height: 50, iconSize: 20, fontSize: 14 },

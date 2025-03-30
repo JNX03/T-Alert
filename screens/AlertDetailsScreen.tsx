@@ -25,16 +25,11 @@ export default function AlertDetailsScreen({ route }: AlertDetailsScreenProps) {
 
     if (route.params.disasterId) {
       setLoading(true)
-      try {
-        const foundDisaster = disasters.find((d) => d.id === route.params.disasterId)
-        if (foundDisaster) {
-          setDisaster(foundDisaster)
-        }
-      } catch (error) {
-        console.error("Error finding disaster:", error)
-      } finally {
-        setLoading(false)
+      const foundDisaster = disasters.find((d) => d.id === route.params.disasterId)
+      if (foundDisaster) {
+        setDisaster(foundDisaster)
       }
+      setLoading(false)
     }
   }, [route.params, disasters])
 

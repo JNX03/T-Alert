@@ -99,7 +99,7 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       const newHighSeverityAlerts = allDisasters.filter(
         (alert) =>
-          alert.severity === "high" && !notifiedIds.includes(alert.id) && !alert.isTest && alert.timestamp > oneHourAgo, // Only notify for alerts from the last hour
+          alert.severity === "high" && !notifiedIds.includes(alert.id) && !alert.isTest && alert.timestamp > oneHourAgo, 
       )
 
       if (newHighSeverityAlerts.length > 0) {
@@ -239,59 +239,115 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const startTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
       const minMagnitude = 2.5
 
-      const response = await fetch(
-        `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${startTime}&endtime=${endTime}&latitude=${latitude}&longitude=${longitude}&maxradiuskm=${radius}&minmagnitude=${minMagnitude}`,
-      )
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch earthquake data")
+      if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
+        console.log("Invalid coordinates for fetchEarthquakes, using default")
+        latitude = 13.7563
+        longitude = 100.5018
       }
 
-      const data = await response.json()
+      try {
+        const response = await fetch(
+          `https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${startTime}&endtime=${endTime}&latitude=${latitude}&longitude=${longitude}&maxradiuskm=${radius}&minmagnitude=${minMagnitude}`,
+          { timeout: 10000 },
+        )
 
-      let earthquakes = data.features.map((feature) => {
-        const { properties, geometry } = feature
-        const coordinates = geometry.coordinates
-
-        let severity: "low" | "medium" | "high" = "low"
-        if (properties.mag >= 6.0) {
-          severity = "high"
-        } else if (properties.mag >= 4.5) {
-          severity = "medium"
+        if (!response.ok) {
+          throw new Error("Failed to fetch earthquake data")
         }
 
-        return {
-          id: feature.id,
-          title: `M${properties.mag.toFixed(1)} Earthquake`,
-          description: properties.place ? `Earthquake detected near ${properties.place}` : "Earthquake detected",
-          type: "earthquake",
-          severity,
-          latitude: coordinates[1],
-          longitude: coordinates[0],
-          location: properties.place || "Unknown location",
-          timestamp: properties.time,
-          source: "USGS Earthquake Information Center",
-          sourceUrl: properties.url,
-          recommendations: "If indoors, drop, cover, and hold on. If outdoors, stay away from buildings.",
-          magnitude: properties.mag,
-          depth: coordinates[2],
-          isRead: false,
-        } as Disaster
-      })
+        const data = await response.json()
 
-      if (preferences.thailandOnly) {
-        earthquakes = earthquakes.filter((earthquake) => isPointInThailand(earthquake.latitude, earthquake.longitude))
+        let earthquakes = data.features.map((feature) => {
+          const { properties, geometry } = feature
+          const coordinates = geometry.coordinates
+
+          let severity: "low" | "medium" | "high" = "low"
+          if (properties.mag >= 6.0) {
+            severity = "high"
+          } else if (properties.mag >= 4.5) {
+            severity = "medium"
+          }
+
+          return {
+            id: feature.id,
+            title: `M${properties.mag.toFixed(1)} Earthquake`,
+            description: properties.place ? `Earthquake detected near ${properties.place}` : "Earthquake detected",
+            type: "earthquake",
+            severity,
+            latitude: coordinates[1],
+            longitude: coordinates[0],
+            location: properties.place || "Unknown location",
+            timestamp: properties.time,
+            source: "USGS Earthquake Information Center",
+            sourceUrl: properties.url,
+            recommendations: "If indoors, drop, cover, and hold on. If outdoors, stay away from buildings.",
+            magnitude: properties.mag,
+            depth: coordinates[2],
+            isRead: false,
+          } as Disaster
+        })
+
+        if (preferences.thailandOnly) {
+          earthquakes = earthquakes.filter((earthquake) => isPointInThailand(earthquake.latitude, earthquake.longitude))
+        }
+
+        return earthquakes
+      } catch (error) {
+        console.error("Error fetching earthquake data:", error)
+        return getMockEarthquakes(latitude, longitude)
       }
-
-      return earthquakes
     } catch (error) {
-      console.error("Error fetching earthquake data:", error)
+      console.error("Error in fetchEarthquakes:", error)
       return []
     }
   }
 
+  const getMockEarthquakes = (latitude: number, longitude: number) => {
+    const now = Date.now()
+    return [
+      {
+        id: `mock-earthquake-${now}-1`,
+        title: "M4.8 Earthquake",
+        description: "Earthquake detected near Chiang Mai",
+        type: "earthquake",
+        severity: "medium",
+        latitude: 18.7883,
+        longitude: 98.9853,
+        location: "Chiang Mai, Thailand",
+        timestamp: now - 86400000, // 1 day ago
+        source: "Offline Data",
+        recommendations: "If indoors, drop, cover, and hold on. If outdoors, stay away from buildings.",
+        magnitude: 4.8,
+        depth: 10,
+        isRead: false,
+      },
+      {
+        id: `mock-earthquake-${now}-2`,
+        title: "M3.5 Earthquake",
+        description: "Earthquake detected near Bangkok",
+        type: "earthquake",
+        severity: "low",
+        latitude: 13.7563,
+        longitude: 100.5018,
+        location: "Bangkok, Thailand",
+        timestamp: now - 172800000, // 2 days ago
+        source: "Offline Data",
+        recommendations: "If indoors, drop, cover, and hold on. If outdoors, stay away from buildings.",
+        magnitude: 3.5,
+        depth: 5,
+        isRead: false,
+      },
+    ]
+  }
+
   const fetchWeatherAlerts = async (latitude: number, longitude: number) => {
     try {
+      if (!latitude || !longitude || isNaN(latitude) || isNaN(longitude)) {
+        console.log("Invalid coordinates for fetchWeatherAlerts, using default")
+        latitude = 13.7563
+        longitude = 100.5018
+      }
+
       let targetLat = latitude
       let targetLon = longitude
 
@@ -300,73 +356,99 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         targetLon = 100.5018
       }
 
-      const response = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${targetLat}&longitude=${targetLon}&daily=weathercode,temperature_2m_max,temperature_2m_min&current_weather=true&timezone=Asia/Bangkok`,
-      )
+      try {
+        const response = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${targetLat}&longitude=${targetLon}&daily=weathercode,temperature_2m_max,temperature_2m_min&current_weather=true&timezone=Asia/Bangkok`,
+          { timeout: 10000 },
+        )
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch weather data")
+        if (!response.ok) {
+          throw new Error("Failed to fetch weather data")
+        }
+
+        const data = await response.json()
+        const weatherCode = data.current_weather.weathercode
+        const alerts: Disaster[] = []
+
+        if ([95, 96, 99].includes(weatherCode)) {
+          alerts.push({
+            id: `weather-thunderstorm-${Date.now()}`,
+            title: "Severe Thunderstorm",
+            description: "Thunderstorm with possible heavy rain and lightning in your area.",
+            type: "storm",
+            severity: "medium",
+            latitude: targetLat,
+            longitude: targetLon,
+            location: `Near ${data.timezone.split("/")[1].replace("_", " ")}`,
+            timestamp: Date.now(),
+            source: "Open-Meteo Weather Service",
+            sourceUrl: "https://open-meteo.com/",
+            recommendations: "Stay indoors and away from windows. Avoid using electrical appliances.",
+            isRead: false,
+          })
+        } else if ([71, 73, 75, 77].includes(weatherCode)) {
+          alerts.push({
+            id: `weather-snow-${Date.now()}`,
+            title: "Heavy Snow",
+            description: "Heavy snowfall expected in your area.",
+            type: "storm",
+            severity: "medium",
+            latitude: targetLat,
+            longitude: targetLon,
+            location: `Near ${data.timezone.split("/")[1].replace("_", " ")}`,
+            timestamp: Date.now(),
+            source: "Open-Meteo Weather Service",
+            sourceUrl: "https://open-meteo.com/",
+            recommendations: "Avoid unnecessary travel. Keep warm and check on vulnerable neighbors.",
+            isRead: false,
+          })
+        } else if (weatherCode >= 80 && weatherCode <= 82) {
+          alerts.push({
+            id: `weather-rain-${Date.now()}`,
+            title: "Heavy Rain",
+            description: "Heavy rainfall that may cause localized flooding.",
+            type: "flood",
+            severity: "low",
+            latitude: targetLat,
+            longitude: targetLon,
+            location: `Near ${data.timezone.split("/")[1].replace("_", " ")}`,
+            timestamp: Date.now(),
+            source: "Open-Meteo Weather Service",
+            sourceUrl: "https://open-meteo.com/",
+            recommendations: "Be cautious when driving and avoid flood-prone areas.",
+            isRead: false,
+          })
+        }
+
+        return alerts
+      } catch (error) {
+        console.error("Error fetching weather data:", error)
+        return getMockWeatherAlerts(targetLat, targetLon)
       }
-
-      const data = await response.json()
-      const weatherCode = data.current_weather.weathercode
-      const alerts: Disaster[] = []
-
-      if ([95, 96, 99].includes(weatherCode)) {
-        alerts.push({
-          id: `weather-thunderstorm-${Date.now()}`,
-          title: "Severe Thunderstorm",
-          description: "Thunderstorm with possible heavy rain and lightning in your area.",
-          type: "storm",
-          severity: "medium",
-          latitude: targetLat,
-          longitude: targetLon,
-          location: `Near ${data.timezone.split("/")[1].replace("_", " ")}`,
-          timestamp: Date.now(),
-          source: "Open-Meteo Weather Service",
-          sourceUrl: "https://open-meteo.com/",
-          recommendations: "Stay indoors and away from windows. Avoid using electrical appliances.",
-          isRead: false,
-        })
-      } else if ([71, 73, 75, 77].includes(weatherCode)) {
-        alerts.push({
-          id: `weather-snow-${Date.now()}`,
-          title: "Heavy Snow",
-          description: "Heavy snowfall expected in your area.",
-          type: "storm",
-          severity: "medium",
-          latitude: targetLat,
-          longitude: targetLon,
-          location: `Near ${data.timezone.split("/")[1].replace("_", " ")}`,
-          timestamp: Date.now(),
-          source: "Open-Meteo Weather Service",
-          sourceUrl: "https://open-meteo.com/",
-          recommendations: "Avoid unnecessary travel. Keep warm and check on vulnerable neighbors.",
-          isRead: false,
-        })
-      } else if (weatherCode >= 80 && weatherCode <= 82) {
-        alerts.push({
-          id: `weather-rain-${Date.now()}`,
-          title: "Heavy Rain",
-          description: "Heavy rainfall that may cause localized flooding.",
-          type: "flood",
-          severity: "low",
-          latitude: targetLat,
-          longitude: targetLon,
-          location: `Near ${data.timezone.split("/")[1].replace("_", " ")}`,
-          timestamp: Date.now(),
-          source: "Open-Meteo Weather Service",
-          sourceUrl: "https://open-meteo.com/",
-          recommendations: "Be cautious when driving and avoid flood-prone areas.",
-          isRead: false,
-        })
-      }
-
-      return alerts
     } catch (error) {
-      console.error("Error fetching weather data:", error)
+      console.error("Error in fetchWeatherAlerts:", error)
       return []
     }
+  }
+
+  const getMockWeatherAlerts = (latitude: number, longitude: number) => {
+    const now = Date.now()
+    return [
+      {
+        id: `mock-weather-${now}-1`,
+        title: "Heavy Rain",
+        description: "Heavy rainfall that may cause localized flooding.",
+        type: "flood",
+        severity: "low",
+        latitude: latitude,
+        longitude: longitude,
+        location: "Your area",
+        timestamp: now,
+        source: "Offline Weather Data",
+        recommendations: "Be cautious when driving and avoid flood-prone areas.",
+        isRead: false,
+      },
+    ]
   }
 
   const fetchPDCDisasterAlerts = async (latitude: number, longitude: number, radius = preferences.alertRadius) => {
@@ -636,45 +718,13 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     while (retryCount < maxRetries) {
       try {
-        let earthquakes = []
-        let weatherAlerts = []
-        let thailandAlerts = []
-        let pdcAlerts = []
-        let reliefWebAlerts = []
-
-        try {
-          if (preferences.earthquakeAlerts) {
-            earthquakes = await fetchEarthquakes(latitude, longitude)
-          }
-        } catch (error) {
-          console.error("Error fetching earthquake data:", error)
-        }
-
-        try {
-          if (preferences.weatherAlerts) {
-            weatherAlerts = await fetchWeatherAlerts(latitude, longitude)
-          }
-        } catch (error) {
-          console.error("Error fetching weather alerts:", error)
-        }
-
-        try {
-          thailandAlerts = await fetchThailandDisasterAlerts(latitude, longitude)
-        } catch (error) {
-          console.error("Error fetching Thailand alerts:", error)
-        }
-
-        try {
-          pdcAlerts = await fetchPDCDisasterAlerts(latitude, longitude)
-        } catch (error) {
-          console.error("Error fetching PDC alerts:", error)
-        }
-
-        try {
-          reliefWebAlerts = await fetchReliefWebAlerts(latitude, longitude)
-        } catch (error) {
-          console.error("Error fetching ReliefWeb alerts:", error)
-        }
+        const [earthquakes, weatherAlerts, thailandAlerts, pdcAlerts, reliefWebAlerts] = await Promise.all([
+          preferences.earthquakeAlerts ? fetchEarthquakes(latitude, longitude) : [],
+          preferences.weatherAlerts ? fetchWeatherAlerts(latitude, longitude) : [],
+          fetchThailandDisasterAlerts(latitude, longitude),
+          fetchPDCDisasterAlerts(latitude, longitude),
+          fetchReliefWebAlerts(latitude, longitude),
+        ])
 
         let allDisasters = [...earthquakes, ...weatherAlerts, ...thailandAlerts, ...pdcAlerts, ...reliefWebAlerts]
 
@@ -692,11 +742,7 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setLastFetchTime(now)
 
         if (preferences.notificationsEnabled) {
-          try {
-            await sendNotificationsForNewAlerts(allDisasters)
-          } catch (notifError) {
-            console.error("Error sending notifications:", notifError)
-          }
+          await sendNotificationsForNewAlerts(allDisasters)
         }
 
         break

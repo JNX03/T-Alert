@@ -4,15 +4,11 @@ import { useState } from "react"
 import { StyleSheet, View, Text, ScrollView, TouchableOpacity, FlatList } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 
-// Add this type at the top of the file
-type IconName = any; // This is a workaround for the Ionicons name type issue
-
-// Safety checklist data
 const safetyChecklists = [
   {
     id: "earthquake",
     title: "Earthquake Safety",
-    icon: "earth" as IconName,
+    icon: "earth",
     color: "#D32F2F",
     items: [
       { id: "eq1", text: "Drop, Cover, and Hold On", checked: false },
@@ -27,7 +23,7 @@ const safetyChecklists = [
   {
     id: "flood",
     title: "Flood Safety",
-    icon: "water" as IconName,
+    icon: "water",
     color: "#2196F3",
     items: [
       { id: "fl1", text: "Move to higher ground immediately", checked: false },
@@ -41,7 +37,7 @@ const safetyChecklists = [
   {
     id: "storm",
     title: "Severe Storm Safety",
-    icon: "thunderstorm" as IconName,
+    icon: "thunderstorm",
     color: "#FF9800",
     items: [
       { id: "st1", text: "Stay indoors and away from windows", checked: false },
@@ -55,7 +51,7 @@ const safetyChecklists = [
   {
     id: "tsunami",
     title: "Tsunami Safety",
-    icon: "water" as IconName,
+    icon: "water",
     color: "#0D47A1",
     items: [
       { id: "ts1", text: "Move inland to higher ground immediately", checked: false },
@@ -68,7 +64,7 @@ const safetyChecklists = [
   {
     id: "emergency",
     title: "Emergency Kit",
-    icon: "medkit" as IconName,
+    icon: "medkit",
     color: "#4CAF50",
     items: [
       { id: "em1", text: "Water (3-day supply)", checked: false },
