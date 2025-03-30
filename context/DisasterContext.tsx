@@ -2,11 +2,11 @@
 
 import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
-import * as Notifications from "expo-notifications"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { usePreferences } from "./PreferencesContext"
 import { isPointWithinRadius, isPointInThailand } from "../utils/locationUtils"
 import { Alert } from "react-native"
+import { sendNotification } from "../utils/notificationHelper"
 
 export type Disaster = {
   id: string
@@ -47,6 +47,10 @@ export const useDisasterContext = () => {
   return context
 }
 
+export const useDisaster = () => {
+  return useContext(DisasterContext)
+}
+
 export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [disasters, setDisasters] = useState<Disaster[]>([])
   const [notificationHistory, setNotificationHistory] = useState<Disaster[]>([])
@@ -82,6 +86,55 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setNotificationHistory([])
     } catch (error) {
       console.error("Error clearing notification history:", error)
+    }
+  }
+
+  const sendNotificationsForNewAlerts = async (allDisasters) => {
+    try {
+      const storedAlertIds = (await AsyncStorage.getItem("notifiedAlertIds")) || "[]"
+      const notifiedIds = JSON.parse(storedAlertIds)
+
+      const now = Date.now()
+      const oneHourAgo = now - 60 * 60 * 1000
+
+      const newHighSeverityAlerts = allDisasters.filter(
+        (alert) =>
+          alert.severity === "high" && !notifiedIds.includes(alert.id) && !alert.isTest && alert.timestamp > oneHourAgo, // Only notify for alerts from the last hour
+      )
+
+      if (newHighSeverityAlerts.length > 0) {
+        const updatedHistory = [...notificationHistory, ...newHighSeverityAlerts]
+        setNotificationHistory(updatedHistory)
+        await AsyncStorage.setItem("notificationHistory", JSON.stringify(updatedHistory))
+      }
+
+      const alertsByType = newHighSeverityAlerts.reduce((acc, alert) => {
+        if (!acc[alert.type]) {
+          acc[alert.type] = []
+        }
+        acc[alert.type].push(alert)
+        return acc
+      }, {})
+
+      for (const [type, alerts] of Object.entries(alertsByType)) {
+        if (alerts.length > 1) {
+          await sendNotification(
+            `🚨 Multiple ${type} alerts`,
+            `${alerts.length} new ${type} alerts in your area`,
+            { alertType: type, count: alerts.length, screen: "Home" },
+            "high",
+          )
+        } else {
+          for (const alert of alerts) {
+            await sendNotification(`🚨 ${alert.title}`, alert.description, { alertId: alert.id }, "high")
+            notifiedIds.push(alert.id)
+          }
+        }
+      }
+
+      await AsyncStorage.setItem("notifiedAlertIds", JSON.stringify(notifiedIds))
+    } catch (error) {
+      console.error("Error sending notifications:", error)
     }
   }
 
@@ -139,7 +192,7 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       description: alertInfo.description,
       type: alertInfo.type,
       severity: alertInfo.severity as "low" | "medium" | "high",
-      latitude: 13.7563, // Default to Bangkok if no location
+      latitude: 13.7563,
       longitude: 100.5018,
       location: "Your Current Location (Test)",
       timestamp: Date.now(),
@@ -158,15 +211,12 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     await AsyncStorage.setItem("notificationHistory", JSON.stringify(updatedHistory))
 
     try {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: `🧪 ${testAlert.title}`,
-          body: testAlert.description,
-          data: { alertId: testAlert.id },
-          sound: true,
-        },
-        trigger: null,
-      })
+      await sendNotification(
+        `🧪 ${testAlert.title}`,
+        testAlert.description,
+        { alertId: testAlert.id },
+        testAlert.severity,
+      )
 
       Alert.alert("Test Alert Sent", `A test ${type} alert notification has been sent to your device.`, [
         { text: "OK" },
@@ -187,7 +237,6 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const endTime = new Date().toISOString()
       const startTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-
       const minMagnitude = 2.5
 
       const response = await fetch(
@@ -332,10 +381,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Typhoon approaching with strong winds and heavy rainfall expected.",
           type: "storm",
           severity: "high",
-          latitude: 14.5995, // Philippines
+          latitude: 14.5995,
           longitude: 120.9842,
           location: "Manila, Philippines",
-          timestamp: now - 1800000, // 30 minutes ago
+          timestamp: now - 1800000,
           source: "Pacific Disaster Center",
           sourceUrl: "https://www.pdc.org/",
           recommendations: "Secure loose objects, prepare emergency supplies, and follow evacuation orders if issued.",
@@ -347,10 +396,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Increased volcanic activity detected with potential for eruption.",
           type: "volcano",
           severity: "medium",
-          latitude: -8.2675, // Indonesia
+          latitude: -8.2675,
           longitude: 115.3755,
           location: "Mount Agung, Bali, Indonesia",
-          timestamp: now - 3600000, // 1 hour ago
+          timestamp: now - 3600000,
           source: "Pacific Disaster Center",
           sourceUrl: "https://www.pdc.org/",
           recommendations: "Monitor official announcements and be prepared to evacuate if necessary.",
@@ -362,10 +411,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Moderate earthquake detected with potential for aftershocks.",
           type: "earthquake",
           severity: "medium",
-          latitude: 35.6762, // Japan
+          latitude: 35.6762,
           longitude: 139.6503,
           location: "Tokyo, Japan",
-          timestamp: now - 7200000, // 2 hours ago
+          timestamp: now - 7200000,
           source: "Pacific Disaster Center",
           sourceUrl: "https://www.pdc.org/",
           recommendations: "Be alert for aftershocks and check structures for damage.",
@@ -379,10 +428,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Severe flooding affecting multiple regions with displacement of populations.",
           type: "flood",
           severity: "high",
-          latitude: 23.8103, // China
+          latitude: 23.8103,
           longitude: 90.4125,
           location: "Yangtze River Basin, China",
-          timestamp: oneMonthAgo + 5 * 24 * 60 * 60 * 1000, // 25 days ago
+          timestamp: oneMonthAgo + 5 * 24 * 60 * 60 * 1000,
           source: "Pacific Disaster Center",
           sourceUrl: "https://www.pdc.org/",
           recommendations: "Follow evacuation orders and avoid flooded areas.",
@@ -394,10 +443,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Tropical cyclone approaching with destructive winds and storm surge.",
           type: "storm",
           severity: "high",
-          latitude: 17.385, // India
+          latitude: 17.385,
           longitude: 78.4867,
           location: "Bay of Bengal, India",
-          timestamp: oneMonthAgo + 15 * 24 * 60 * 60 * 1000, // 15 days ago
+          timestamp: oneMonthAgo + 15 * 24 * 60 * 60 * 1000,
           source: "Pacific Disaster Center",
           sourceUrl: "https://www.pdc.org/",
           recommendations: "Evacuate coastal areas and seek shelter in sturdy buildings.",
@@ -406,7 +455,7 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ]
 
       if (preferences.thailandOnly) {
-        return [] 
+        return []
       }
 
       return mockPDCAlerts.filter((alert) =>
@@ -430,10 +479,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Widespread flooding affecting multiple regions with displacement of populations.",
           type: "flood",
           severity: "high",
-          latitude: 19.076, // Vietnam
+          latitude: 19.076,
           longitude: 105.3312,
           location: "Central Vietnam",
-          timestamp: now - 86400000, // 1 day ago
+          timestamp: now - 86400000,
           source: "ReliefWeb",
           sourceUrl: "https://reliefweb.int/",
           recommendations: "Seek higher ground and follow evacuation instructions from local authorities.",
@@ -445,10 +494,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Prolonged drought conditions affecting agricultural production and water supplies.",
           type: "drought",
           severity: "medium",
-          latitude: 15.87, // Cambodia
+          latitude: 15.87,
           longitude: 104.78,
           location: "Northeast Cambodia",
-          timestamp: now - 172800000, // 2 days ago
+          timestamp: now - 172800000,
           source: "ReliefWeb",
           sourceUrl: "https://reliefweb.int/",
           recommendations: "Conserve water and follow guidance from local authorities.",
@@ -460,10 +509,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Multiple landslides triggered by heavy rainfall have blocked roads and damaged homes.",
           type: "landslide",
           severity: "high",
-          latitude: 27.7172, // Nepal
+          latitude: 27.7172,
           longitude: 85.324,
           location: "Central Nepal",
-          timestamp: oneMonthAgo + 10 * 24 * 60 * 60 * 1000, // 20 days ago
+          timestamp: oneMonthAgo + 10 * 24 * 60 * 60 * 1000,
           source: "ReliefWeb",
           sourceUrl: "https://reliefweb.int/",
           recommendations: "Avoid hillside areas and follow evacuation orders.",
@@ -475,10 +524,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Large wildfire spreading rapidly due to dry conditions and strong winds.",
           type: "wildfire",
           severity: "medium",
-          latitude: -33.8688, // Australia
+          latitude: -33.8688,
           longitude: 151.2093,
           location: "New South Wales, Australia",
-          timestamp: oneMonthAgo + 20 * 24 * 60 * 60 * 1000, // 10 days ago
+          timestamp: oneMonthAgo + 20 * 24 * 60 * 60 * 1000,
           source: "ReliefWeb",
           sourceUrl: "https://reliefweb.int/",
           recommendations: "Follow evacuation orders and stay informed through local emergency services.",
@@ -487,7 +536,7 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       ]
 
       if (preferences.thailandOnly) {
-        return [] 
+        return []
       }
 
       return mockReliefWebAlerts
@@ -509,10 +558,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Heavy monsoon rains have caused flooding in central Thailand.",
           type: "flood",
           severity: "medium",
-          latitude: 13.7563, // Bangkok
+          latitude: 13.7563,
           longitude: 100.5018,
           location: "Central Thailand",
-          timestamp: now - 3600000, // 1 hour ago
+          timestamp: now - 3600000,
           source: "Thai Meteorological Department",
           sourceUrl: "https://www.tmd.go.th/",
           recommendations: "Avoid flood-prone areas. Follow evacuation orders if issued.",
@@ -524,10 +573,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Heavy rainfall has increased the risk of landslides in northern Thailand.",
           type: "landslide",
           severity: "high",
-          latitude: 18.7883, // Chiang Mai
+          latitude: 18.7883,
           longitude: 98.9853,
           location: "Northern Thailand",
-          timestamp: now - 7200000, // 2 hours ago
+          timestamp: now - 7200000,
           source: "Department of Disaster Prevention and Mitigation",
           sourceUrl: "https://www.disaster.go.th/",
           recommendations: "Avoid hillside areas. Be prepared to evacuate if necessary.",
@@ -539,10 +588,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Tropical storm bringing heavy rainfall and strong winds to southern provinces.",
           type: "storm",
           severity: "medium",
-          latitude: 7.8804, // Phuket
+          latitude: 7.8804,
           longitude: 98.3923,
           location: "Southern Thailand",
-          timestamp: oneMonthAgo + 7 * 24 * 60 * 60 * 1000, // 23 days ago
+          timestamp: oneMonthAgo + 7 * 24 * 60 * 60 * 1000,
           source: "Thai Meteorological Department",
           sourceUrl: "https://www.tmd.go.th/",
           recommendations: "Secure loose objects and stay indoors during peak storm conditions.",
@@ -554,10 +603,10 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           description: "Water shortage affecting agricultural areas in northeastern Thailand.",
           type: "drought",
           severity: "low",
-          latitude: 16.4331, // Khon Kaen
+          latitude: 16.4331,
           longitude: 102.8236,
           location: "Northeastern Thailand",
-          timestamp: oneMonthAgo + 25 * 24 * 60 * 60 * 1000, // 5 days ago
+          timestamp: oneMonthAgo + 25 * 24 * 60 * 60 * 1000,
           source: "Department of Disaster Prevention and Mitigation",
           sourceUrl: "https://www.disaster.go.th/",
           recommendations: "Conserve water and follow local water usage restrictions.",
@@ -576,66 +625,95 @@ export const DisasterProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const fetchDisasters = async (latitude: number, longitude: number) => {
     const now = Date.now()
-    if (now - lastFetchTime < 5 * 60 * 1000 && disasters.length > 0) {
+    if (now - lastFetchTime < 5 * 60 * 1000 && disasters.length > 0 && !loading) {
       return
     }
 
     setLoading(true)
 
-    try {
-      const [earthquakes, weatherAlerts, thailandAlerts, pdcAlerts, reliefWebAlerts] = await Promise.all([
-        preferences.earthquakeAlerts ? fetchEarthquakes(latitude, longitude) : [],
-        preferences.weatherAlerts ? fetchWeatherAlerts(latitude, longitude) : [],
-        fetchThailandDisasterAlerts(latitude, longitude),
-        fetchPDCDisasterAlerts(latitude, longitude),
-        fetchReliefWebAlerts(latitude, longitude),
-      ])
-      let allDisasters = [...earthquakes, ...weatherAlerts, ...thailandAlerts, ...pdcAlerts, ...reliefWebAlerts]
-      if (preferences.highSeverityOnly) {
-        allDisasters = allDisasters.filter((disaster) => disaster.severity === "high")
-      }
-      allDisasters.sort((a, b) => b.timestamp - a.timestamp)
-      const testAlerts = disasters.filter((d) => d.isTest)
-      const nonTestDisasters = allDisasters.filter((d) => !d.isTest)
-      allDisasters = [...testAlerts, ...nonTestDisasters]
+    let retryCount = 0
+    const maxRetries = 3
 
-      setDisasters(allDisasters)
-      setLastFetchTime(now)
+    while (retryCount < maxRetries) {
+      try {
+        let earthquakes = []
+        let weatherAlerts = []
+        let thailandAlerts = []
+        let pdcAlerts = []
+        let reliefWebAlerts = []
 
-      if (preferences.notificationsEnabled) {
-        const storedAlertIds = (await AsyncStorage.getItem("notifiedAlertIds")) || "[]"
-        const notifiedIds = JSON.parse(storedAlertIds)
-
-        const newHighSeverityAlerts = allDisasters.filter(
-          (alert) => alert.severity === "high" && !notifiedIds.includes(alert.id) && !alert.isTest,
-        )
-
-        if (newHighSeverityAlerts.length > 0) {
-          const updatedHistory = [...notificationHistory, ...newHighSeverityAlerts]
-          setNotificationHistory(updatedHistory)
-          await AsyncStorage.setItem("notificationHistory", JSON.stringify(updatedHistory))
+        try {
+          if (preferences.earthquakeAlerts) {
+            earthquakes = await fetchEarthquakes(latitude, longitude)
+          }
+        } catch (error) {
+          console.error("Error fetching earthquake data:", error)
         }
 
-        for (const alert of newHighSeverityAlerts) {
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: `🚨 ${alert.title}`,
-              body: alert.description,
-              data: { alertId: alert.id },
-              sound: true,
-            },
-            trigger: null,
-          })
-
-          notifiedIds.push(alert.id)
+        try {
+          if (preferences.weatherAlerts) {
+            weatherAlerts = await fetchWeatherAlerts(latitude, longitude)
+          }
+        } catch (error) {
+          console.error("Error fetching weather alerts:", error)
         }
 
-        await AsyncStorage.setItem("notifiedAlertIds", JSON.stringify(notifiedIds))
+        try {
+          thailandAlerts = await fetchThailandDisasterAlerts(latitude, longitude)
+        } catch (error) {
+          console.error("Error fetching Thailand alerts:", error)
+        }
+
+        try {
+          pdcAlerts = await fetchPDCDisasterAlerts(latitude, longitude)
+        } catch (error) {
+          console.error("Error fetching PDC alerts:", error)
+        }
+
+        try {
+          reliefWebAlerts = await fetchReliefWebAlerts(latitude, longitude)
+        } catch (error) {
+          console.error("Error fetching ReliefWeb alerts:", error)
+        }
+
+        let allDisasters = [...earthquakes, ...weatherAlerts, ...thailandAlerts, ...pdcAlerts, ...reliefWebAlerts]
+
+        if (preferences.highSeverityOnly) {
+          allDisasters = allDisasters.filter((disaster) => disaster.severity === "high")
+        }
+
+        allDisasters.sort((a, b) => b.timestamp - a.timestamp)
+
+        const testAlerts = disasters.filter((d) => d.isTest)
+        const nonTestDisasters = allDisasters.filter((d) => !d.isTest)
+        allDisasters = [...testAlerts, ...nonTestDisasters]
+
+        setDisasters(allDisasters)
+        setLastFetchTime(now)
+
+        if (preferences.notificationsEnabled) {
+          try {
+            await sendNotificationsForNewAlerts(allDisasters)
+          } catch (notifError) {
+            console.error("Error sending notifications:", notifError)
+          }
+        }
+
+        break
+      } catch (error) {
+        console.error("Error fetching disaster data:", error)
+        retryCount++
+
+        if (retryCount >= maxRetries) {
+          console.error("Max retries reached for fetching disaster data")
+        } else {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, retryCount)))
+        }
+      } finally {
+        if (retryCount >= maxRetries || retryCount === 0) {
+          setLoading(false)
+        }
       }
-    } catch (error) {
-      console.error("Error fetching disaster data:", error)
-    } finally {
-      setLoading(false)
     }
   }
 

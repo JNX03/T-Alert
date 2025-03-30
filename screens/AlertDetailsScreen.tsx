@@ -1,15 +1,42 @@
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Linking } from "react-native"
+"use client"
+
+import { useEffect, useState } from "react"
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Linking, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps"
 import type { RouteProp } from "@react-navigation/native"
 import type { Disaster } from "../context/DisasterContext"
+import { useDisasterContext } from "../context/DisasterContext"
 
 type AlertDetailsScreenProps = {
-  route: RouteProp<{ params: { disaster: Disaster } }, "params">
+  route: RouteProp<{ params: { disaster?: Disaster; disasterId?: string } }, "params">
 }
 
 export default function AlertDetailsScreen({ route }: AlertDetailsScreenProps) {
-  const { disaster } = route.params
+  const { disasters } = useDisasterContext()
+  const [disaster, setDisaster] = useState<Disaster | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (route.params.disaster) {
+      setDisaster(route.params.disaster)
+      return
+    }
+
+    if (route.params.disasterId) {
+      setLoading(true)
+      try {
+        const foundDisaster = disasters.find((d) => d.id === route.params.disasterId)
+        if (foundDisaster) {
+          setDisaster(foundDisaster)
+        }
+      } catch (error) {
+        console.error("Error finding disaster:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+  }, [route.params, disasters])
 
   const formatDate = (timestamp) => {
     const date = new Date(timestamp)
@@ -17,9 +44,28 @@ export default function AlertDetailsScreen({ route }: AlertDetailsScreenProps) {
   }
 
   const openSourceLink = async () => {
-    if (disaster.sourceUrl) {
+    if (disaster?.sourceUrl) {
       await Linking.openURL(disaster.sourceUrl)
     }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#D32F2F" />
+        <Text style={styles.loadingText}>Loading alert details...</Text>
+      </View>
+    )
+  }
+
+  if (!disaster) {
+    return (
+      <View style={styles.errorContainer}>
+        <Ionicons name="alert-circle-outline" size={60} color="#D32F2F" />
+        <Text style={styles.errorText}>Alert not found</Text>
+        <Text style={styles.errorSubtext}>The alert may have been removed or expired</Text>
+      </View>
+    )
   }
 
   return (
@@ -117,9 +163,39 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#757575",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#fff",
+  },
+  errorText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#212121",
+    marginTop: 16,
+  },
+  errorSubtext: {
+    fontSize: 14,
+    color: "#757575",
+    marginTop: 8,
+    textAlign: "center",
+  },
   header: {
     padding: 20,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: "#f8f8f8",
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
@@ -127,6 +203,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "bold",
     marginBottom: 5,
+    color: "#212121",
   },
   timestamp: {
     fontSize: 14,
@@ -134,10 +211,15 @@ const styles = StyleSheet.create({
   },
   severityBadge: {
     alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 4,
-    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
+    elevation: 2,
   },
   highSeverity: {
     backgroundColor: "#e53935",
@@ -152,11 +234,14 @@ const styles = StyleSheet.create({
     color: "white",
     fontWeight: "bold",
     fontSize: 12,
+    letterSpacing: 0.5,
   },
   mapContainer: {
-    height: 200,
+    height: 220,
     width: "100%",
     overflow: "hidden",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
   },
   map: {
     width: "100%",
@@ -169,32 +254,38 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     marginTop: 15,
-    marginBottom: 10,
+    marginBottom: 12,
+    color: "#212121",
   },
   description: {
     fontSize: 16,
     lineHeight: 24,
-    color: "#333",
+    color: "#424242",
     marginBottom: 15,
   },
   detailRow: {
     flexDirection: "row",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   detailLabel: {
     fontSize: 16,
     fontWeight: "bold",
     width: 100,
+    color: "#616161",
   },
   detailValue: {
     fontSize: 16,
     flex: 1,
+    color: "#212121",
   },
   sourceContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 5,
+    marginTop: 8,
+    padding: 12,
+    backgroundColor: "#f5f5f5",
+    borderRadius: 8,
   },
   sourceText: {
     fontSize: 16,
@@ -203,10 +294,15 @@ const styles = StyleSheet.create({
   sourceButton: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#e3f2fd",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
   },
   sourceButtonText: {
     color: "#2196F3",
     marginRight: 5,
+    fontWeight: "500",
   },
 })
 

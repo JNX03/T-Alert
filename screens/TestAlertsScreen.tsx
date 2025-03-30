@@ -113,7 +113,7 @@ export default function TestAlertsScreen() {
         <Ionicons name="information-circle" size={24} color="#2196F3" style={styles.infoIcon} />
         <Text style={[styles.infoText, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
           Test alerts are for demonstration purposes only and do not represent real emergency situations. They will be
-          automatically removed when you restart the app. Don't use it for plank other people na .-.
+          automatically removed when you restart the app.
         </Text>
       </View>
     </ScrollView>

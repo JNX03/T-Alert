@@ -1,16 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import {
-  StyleSheet,
-  View,
-  Text,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  Animated,
-  RefreshControl,
-} from "react-native"
+import { useEffect, useState, useCallback, memo } from "react"
+import { StyleSheet, View, Text, FlatList, TouchableOpacity, Animated, RefreshControl } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import type { Disaster } from "../context/DisasterContext"
 import { usePreferences } from "../context/PreferencesContext"
@@ -23,6 +14,74 @@ type ActiveAlertsListProps = {
   refreshing: boolean
 }
 
+const AlertItem = memo(({
+  item,
+  onAlertPress,
+  preferences,
+  renderAlertIcon,
+  formatTimeAgo
+}: {
+  item: any;
+  onAlertPress: any;
+  preferences: any;
+  renderAlertIcon: any;
+  formatTimeAgo: any
+}) => {
+  const [fadeAnim] = useState(new Animated.Value(0))
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start()
+  }, [])
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim }}>
+      <TouchableOpacity
+        style={[
+          styles.alertItem,
+          item.isRead ? styles.readAlert : null,
+          item.isTest ? styles.testAlert : null,
+          preferences.theme === "dark" ? styles.darkAlertItem : styles.lightAlertItem,
+        ]}
+        onPress={() => onAlertPress(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.alertIconContainer}>{renderAlertIcon(item.type)}</View>
+        <View style={styles.alertContent}>
+          <Text style={[styles.alertTitle, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
+            {item.isTest && <Text style={styles.testBadge}>TEST </Text>}
+            {item.title}
+          </Text>
+          <Text
+            style={[styles.alertLocation, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}
+            numberOfLines={1}
+          >
+            {item.location}
+          </Text>
+        </View>
+        <View style={styles.alertMeta}>
+          <View
+            style={[
+              styles.severityIndicator,
+              item.severity === "high"
+                ? styles.highSeverity
+                : item.severity === "medium"
+                  ? styles.mediumSeverity
+                  : styles.lowSeverity,
+            ]}
+          />
+          <Text style={[styles.alertTime, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}>
+            {formatTimeAgo(item.timestamp)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    </Animated.View>
+  )
+})
+
 export default function ActiveAlertsList({
   disasters,
   loading,
@@ -31,24 +90,8 @@ export default function ActiveAlertsList({
   refreshing,
 }: ActiveAlertsListProps) {
   const { preferences } = usePreferences()
-  const [animations, setAnimations] = useState<Animated.Value[]>([])
 
-  useEffect(() => {
-    const newAnimations = disasters.map(() => new Animated.Value(0))
-    setAnimations(newAnimations)
-    const animationSequence = newAnimations.map((anim, index) => {
-      return Animated.timing(anim, {
-        toValue: 1,
-        duration: 300,
-        delay: index * 100,
-        useNativeDriver: true,
-      })
-    })
-
-    Animated.stagger(50, animationSequence).start()
-  }, [disasters])
-
-  const renderAlertIcon = (type) => {
+  const renderAlertIcon = useCallback((type: string) => {
     switch (type.toLowerCase()) {
       case "earthquake":
         return <Ionicons name="earth" size={24} color="#D32F2F" />
@@ -71,12 +114,12 @@ export default function ActiveAlertsList({
       default:
         return <Ionicons name="warning" size={24} color="#FFC107" />
     }
-  }
+  }, [])
 
-  const formatTimeAgo = (timestamp) => {
+  const formatTimeAgo = useCallback((timestamp: number) => {
     const now = new Date()
     const alertTime = new Date(timestamp)
-    const diffInSeconds = Math.floor((now - alertTime) / 1000)
+    const diffInSeconds = Math.floor((now.getTime() - alertTime.getTime()) / 1000)
 
     if (diffInSeconds < 60) {
       return `${diffInSeconds}s ago`
@@ -87,135 +130,60 @@ export default function ActiveAlertsList({
     } else {
       return `${Math.floor(diffInSeconds / 86400)}d ago`
     }
-  }
+  }, [])
 
-  const renderItem = ({ item, index }) => {
-    const animValue = animations[index]
-    if (!animValue) {
-      return (
-        <TouchableOpacity
-          style={[
-            styles.alertItem,
-            item.isRead ? styles.readAlert : null,
-            item.isTest ? styles.testAlert : null,
-            preferences.theme === "dark" ? styles.darkAlertItem : styles.lightAlertItem,
-          ]}
-          onPress={() => onAlertPress(item)}
-        >
-          <View style={styles.alertIconContainer}>{renderAlertIcon(item.type)}</View>
-          <View style={styles.alertContent}>
-            <Text style={[styles.alertTitle, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
-              {item.isTest && <Text style={styles.testBadge}>TEST </Text>}
-              {item.title}
-            </Text>
-            <Text
-              style={[styles.alertLocation, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}
-            >
-              {item.location}
-            </Text>
-          </View>
-          <View style={styles.alertMeta}>
-            <View
-              style={[
-                styles.severityIndicator,
-                item.severity === "high"
-                  ? styles.highSeverity
-                  : item.severity === "medium"
-                    ? styles.mediumSeverity
-                    : styles.lowSeverity,
-              ]}
-            />
-            <Text style={[styles.alertTime, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}>
-              {formatTimeAgo(item.timestamp)}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      )
-    }
+  const renderItem = useCallback(
+    ({ item }) => (
+      <AlertItem
+        item={item}
+        onAlertPress={onAlertPress}
+        preferences={preferences}
+        renderAlertIcon={renderAlertIcon}
+        formatTimeAgo={formatTimeAgo}
+      />
+    ),
+    [onAlertPress, preferences, renderAlertIcon, formatTimeAgo],
+  )
 
-    return (
-      <Animated.View
-        style={{
-          opacity: animValue,
-          transform: [
-            {
-              translateY: animValue.interpolate({
-                inputRange: [0, 1],
-                outputRange: [50, 0],
-              }),
-            },
-          ],
-        }}
-      >
-        <TouchableOpacity
-          style={[
-            styles.alertItem,
-            item.isRead ? styles.readAlert : null,
-            item.isTest ? styles.testAlert : null,
-            preferences.theme === "dark" ? styles.darkAlertItem : styles.lightAlertItem,
-          ]}
-          onPress={() => onAlertPress(item)}
-        >
-          <View style={styles.alertIconContainer}>{renderAlertIcon(item.type)}</View>
-          <View style={styles.alertContent}>
-            <Text style={[styles.alertTitle, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
-              {item.isTest && <Text style={styles.testBadge}>TEST </Text>}
-              {item.title}
-            </Text>
-            <Text
-              style={[styles.alertLocation, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}
-            >
-              {item.location}
-            </Text>
-          </View>
-          <View style={styles.alertMeta}>
-            <View
-              style={[
-                styles.severityIndicator,
-                item.severity === "high"
-                  ? styles.highSeverity
-                  : item.severity === "medium"
-                    ? styles.mediumSeverity
-                    : styles.lowSeverity,
-              ]}
-            />
-            <Text style={[styles.alertTime, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}>
-              {formatTimeAgo(item.timestamp)}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
-    )
-  }
+  const getItemLayout = useCallback(
+    (_, index) => ({
+      length: 80,
+      offset: 80 * index,
+      index,
+    }),
+    [],
+  )
+
+  const keyExtractor = useCallback((item) => item.id, [])
+
+  const EmptyComponent = useCallback(
+    () => (
+      <View style={styles.emptyContainer}>
+        <Ionicons
+          name="checkmark-circle-outline"
+          size={50}
+          color={preferences.theme === "dark" ? "#4CAF50" : "#4CAF50"}
+        />
+        <Text style={[styles.emptyText, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
+          No active alerts in your area
+        </Text>
+        <Text style={[styles.emptySubtext, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}>
+          Pull down to refresh
+        </Text>
+      </View>
+    ),
+    [preferences.theme],
+  )
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, preferences.theme === "dark" ? styles.darkHeader : styles.lightHeader]}>
-        <Text style={[styles.title, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
-          Active Alerts
-        </Text>
-        {loading && <ActivityIndicator size="small" color="#D32F2F" />}
-      </View>
-
       {disasters.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons
-            name="checkmark-circle-outline"
-            size={50}
-            color={preferences.theme === "dark" ? "#4CAF50" : "#4CAF50"}
-          />
-          <Text style={[styles.emptyText, preferences.theme === "dark" ? styles.darkText : styles.lightText]}>
-            No active alerts in your area
-          </Text>
-          <Text style={[styles.emptySubtext, preferences.theme === "dark" ? styles.darkSubtext : styles.lightSubtext]}>
-            Pull down to refresh
-          </Text>
-        </View>
+        <EmptyComponent />
       ) : (
         <FlatList
           data={disasters}
           renderItem={renderItem}
-          keyExtractor={(item, index) => `alert-${index}`}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -225,6 +193,11 @@ export default function ActiveAlertsList({
               tintColor={preferences.theme === "dark" ? "#f0f0f0" : "#D32F2F"}
             />
           }
+          getItemLayout={getItemLayout}
+          initialNumToRender={8}
+          maxToRenderPerBatch={5}
+          windowSize={10}
+          removeClippedSubviews={true}
         />
       )}
     </View>
@@ -235,47 +208,22 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-  },
-  lightHeader: {
-    borderBottomColor: "#f0f0f0",
-  },
-  darkHeader: {
-    borderBottomColor: "#333",
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  lightText: {
-    color: "#333",
-  },
-  darkText: {
-    color: "#f0f0f0",
-  },
-  lightSubtext: {
-    color: "#757575",
-  },
-  darkSubtext: {
-    color: "#aaaaaa",
-  },
   listContent: {
     padding: 10,
   },
   alertItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 15,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
-    marginBottom: 8,
-    borderRadius: 8,
+    marginBottom: 10,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
   lightAlertItem: {
     backgroundColor: "#fff",
@@ -304,8 +252,8 @@ const styles = StyleSheet.create({
   },
   alertTitle: {
     fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 3,
+    fontWeight: "600",
+    marginBottom: 4,
   },
   alertLocation: {
     fontSize: 14,
@@ -325,6 +273,11 @@ const styles = StyleSheet.create({
   },
   highSeverity: {
     backgroundColor: "#D32F2F",
+    shadowColor: "#D32F2F",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 3,
   },
   mediumSeverity: {
     backgroundColor: "#FF9800",
@@ -342,11 +295,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 10,
     textAlign: "center",
+    fontWeight: "500",
   },
   emptySubtext: {
     fontSize: 14,
     marginTop: 5,
     textAlign: "center",
+  },
+  lightText: {
+    color: "#333",
+  },
+  darkText: {
+    color: "#f0f0f0",
+  },
+  lightSubtext: {
+    color: "#757575",
+  },
+  darkSubtext: {
+    color: "#aaaaaa",
   },
 })
 
