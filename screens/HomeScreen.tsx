@@ -11,9 +11,11 @@ import {
   ActivityIndicator,
   AppState,
   Dimensions,
+  Platform,
+  PermissionsAndroid,
 } from "react-native"
 import MapView, { Marker, PROVIDER_GOOGLE, Circle } from "react-native-maps"
-import * as Location from "expo-location"
+import Geolocation from "@react-native-community/geolocation"
 import { Ionicons } from "@expo/vector-icons"
 import { useFocusEffect, useNavigation } from "@react-navigation/native"
 import { useDisasterContext } from "../context/DisasterContext"
@@ -35,7 +37,17 @@ const MAX_PANEL_HEIGHT = SCREEN_HEIGHT * 0.7
 TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
   try {
     console.log("[Background Fetch] Task executed")
-    const locationStr = await Location.getLastKnownPositionAsync()
+    // Replace this:
+    // const locationStr = await Location.getLastKnownPositionAsync()
+
+    // With this:
+    const locationStr = await new Promise((resolve) => {
+      Geolocation.getCurrentPosition(
+        (position) => resolve(position),
+        (error) => resolve(null),
+        { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
+      )
+    })
     if (!locationStr) return BackgroundFetch.BackgroundFetchResult.NoData
     return BackgroundFetch.BackgroundFetchResult.NewData
   } catch (error) {
@@ -51,17 +63,11 @@ export default function HomeScreen() {
   const navigation = useNavigation()
   const {
     disasters,
-    fetchDisasters: fetchDisastersContext,
     loading,
+    fetchDisasters: fetchDisastersContext,
     setDisasters,
     setLastRefetchTime,
     lastFetchTime,
-    fetchEarthquakes,
-    fetchWeatherAlerts,
-    fetchThailandDisasterAlerts,
-    fetchPDCDisasterAlerts,
-    fetchReliefWebAlerts,
-    sendNotificationsForNewAlerts,
   } = useDisasterContext()
   const { preferences } = usePreferences()
   const { t } = useTranslation()
@@ -117,7 +123,32 @@ export default function HomeScreen() {
       const notifStatus = (await Notifications.getPermissionsAsync()).status
       setNotificationPermission(notifStatus)
 
-      const locStatus = (await Location.getForegroundPermissionsAsync()).status
+      // Replace this:
+      // const locStatus = (await Location.getForegroundPermissionsAsync()).status
+
+      // With this:
+      const requestLocationPermission = async () => {
+        return new Promise((resolve) => {
+          if (Platform.OS === "ios") {
+            Geolocation.requestAuthorization("whenInUse", (status) => {
+              resolve(status === "granted" ? "granted" : "denied")
+            })
+          } else {
+            PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
+              title: "Location Permission",
+              message: "This app needs access to your location to show relevant disaster alerts.",
+              buttonNeutral: "Ask Me Later",
+              buttonNegative: "Cancel",
+              buttonPositive: "OK",
+            })
+              .then((status) => {
+                resolve(status === PermissionsAndroid.RESULTS.GRANTED ? "granted" : "denied")
+              })
+              .catch(() => resolve("denied"))
+          }
+        })
+      }
+      const locStatus = await requestLocationPermission()
       setLocationPermission(locStatus)
     } catch (error) {
       console.log("Error checking permissions:", error)
@@ -174,6 +205,31 @@ export default function HomeScreen() {
     }
   }, [location, preferences.backgroundAlerts, t])
 
+  const checkLocationServices = async () => {
+    try {
+      if (Platform.OS === "android") {
+        return new Promise((resolve) => {
+          Geolocation.getCurrentPosition(
+            () => resolve(true),
+            () => resolve(false),
+            { timeout: 5000, maximumAge: 10000 },
+          )
+        })
+      } else {
+        return new Promise((resolve) => {
+          Geolocation.getCurrentPosition(
+            () => resolve(true),
+            () => resolve(false),
+            { timeout: 5000 },
+          )
+        })
+      }
+    } catch (error) {
+      console.log("Error checking location services:", error)
+      return false
+    }
+  }
+
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -190,25 +246,23 @@ export default function HomeScreen() {
 
     const getLocationAndFetchData = async () => {
       try {
-        const { status } = await Location.requestForegroundPermissionsAsync()
-        setLocationPermission(status)
+        const locationServicesEnabled = await checkLocationServices()
+        if (!locationServicesEnabled) {
+          console.log("Location services are disabled")
+          setErrorMsg(t("location_services_disabled"))
 
-        const defaultLocation = {
-          coords: {
-            latitude: 13.7563,
-            longitude: 100.5018,
-            accuracy: 0,
-            altitude: 0,
-            altitudeAccuracy: 0,
-            heading: 0,
-            speed: 0,
-          },
-          timestamp: Date.now(),
-        }
-
-        if (status !== "granted") {
-          console.log("Location permission denied")
-          setErrorMsg(t("location_permission_denied"))
+          const defaultLocation = {
+            coords: {
+              latitude: 13.7563,
+              longitude: 100.5018,
+              accuracy: 0,
+              altitude: 0,
+              altitudeAccuracy: 0,
+              heading: 0,
+              speed: 0,
+            },
+            timestamp: Date.now(),
+          }
 
           setLocation(defaultLocation)
           fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
@@ -217,63 +271,136 @@ export default function HomeScreen() {
           return
         }
 
-        try {
-          const locationPromise = Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          }).catch((error) => {
-            console.log("Error in getCurrentPositionAsync:", error)
-            return null
-          })
+        const getLocationAndFetchData = async () => {
+          try {
+            const defaultLocation = {
+              coords: {
+                latitude: 13.7563,
+                longitude: 100.5018,
+                accuracy: 0,
+                altitude: 0,
+                altitudeAccuracy: 0,
+                heading: 0,
+                speed: 0,
+              },
+              timestamp: Date.now(),
+            }
 
-          const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 10000))
+            const requestLocationPermission = async () => {
+              return new Promise((resolve) => {
+                if (Platform.OS === "ios") {
+                  Geolocation.requestAuthorization("whenInUse", (status) => {
+                    resolve(status === "granted" ? "granted" : "denied")
+                  })
+                } else {
+                  PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
+                    title: "Location Permission",
+                    message: "This app needs access to your location to show relevant disaster alerts.",
+                    buttonNeutral: "Ask Me Later",
+                    buttonNegative: "Cancel",
+                    buttonPositive: "OK",
+                  })
+                    .then((status) => {
+                      resolve(status === PermissionsAndroid.RESULTS.GRANTED ? "granted" : "denied")
+                    })
+                    .catch(() => resolve("denied"))
+                }
+              })
+            }
+            const status = await requestLocationPermission()
+            setLocationPermission(status)
 
-          const location = await Promise.race([locationPromise, timeoutPromise])
+            if (status !== "granted") {
+              console.log("Location permission denied")
+              setErrorMsg(t("location_permission_denied"))
 
-          if (location) {
-            setLocation(location)
-            fetchDisasters(location.coords.latitude, location.coords.longitude)
-          } else {
-            console.log("Location request timed out or failed, using default location")
+              setLocation(defaultLocation)
+              fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
+              setLastRefreshTime(new Date())
+              startCountdownTimer()
+              return
+            }
+
+            Geolocation.setRNConfiguration({
+              skipPermissionRequests: false,
+              authorizationLevel: "whenInUse",
+              enableBackgroundLocationUpdates: false,
+            })
+
+            try {
+              const locationPromise = new Promise((resolve, reject) => {
+                Geolocation.getCurrentPosition(
+                  (position) => resolve(position),
+                  (error) => {
+                    console.log("Error in getCurrentPosition:", error)
+                    reject(error)
+                  },
+                  {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 10000,
+                    forceRequestLocation: true,
+                  },
+                )
+              }).catch((error) => {
+                console.log("Error in getCurrentPosition:", error)
+                return null
+              })
+
+              const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve(null), 10000))
+
+              const location = await Promise.race([locationPromise, timeoutPromise])
+
+              if (location) {
+                console.log("Location obtained:", location)
+                setLocation(location)
+                fetchDisasters(location.coords.latitude, location.coords.longitude)
+              } else {
+                console.log("Location request timed out or failed, using default location")
+                setLocation(defaultLocation)
+                fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
+                setErrorMsg(t("using_default_location"))
+              }
+
+              const notifStatus = await Notifications.getPermissionsAsync().catch(() => ({ status: "denied" }))
+              setNotificationPermission(notifStatus.status)
+
+              setLastRefreshTime(new Date())
+              startCountdownTimer()
+            } catch (error) {
+              console.log("Error getting current location:", error)
+
+              setLocation(defaultLocation)
+              fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
+              setLastRefreshTime(new Date())
+              startCountdownTimer()
+              setErrorMsg(t("using_default_location"))
+            }
+          } catch (error) {
+            console.log("Error in getLocationAndFetchData:", error)
+
+            const defaultLocation = {
+              coords: {
+                latitude: 13.7563,
+                longitude: 100.5018,
+                accuracy: 0,
+                altitude: 0,
+                altitudeAccuracy: 0,
+                heading: 0,
+                speed: 0,
+              },
+              timestamp: Date.now(),
+            }
+
             setLocation(defaultLocation)
             fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
-            setErrorMsg(t("using_default_location"))
+            setLastRefreshTime(new Date())
+            startCountdownTimer()
+            setErrorMsg(t("location_error"))
           }
-
-          const notifStatus = await Notifications.getPermissionsAsync().catch(() => ({ status: "denied" }))
-          setNotificationPermission(notifStatus.status)
-
-          setLastRefreshTime(new Date())
-          startCountdownTimer()
-        } catch (error) {
-          console.log("Error getting current location:", error)
-
-          setLocation(defaultLocation)
-          fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
-          setLastRefreshTime(new Date())
-          startCountdownTimer()
-          setErrorMsg(t("using_default_location"))
         }
       } catch (error) {
-        console.log("Error in getLocationAndFetchData:", error)
-
-        const defaultLocation = {
-          coords: {
-            latitude: 13.7563,
-            longitude: 100.5018,
-            accuracy: 0,
-            altitude: 0,
-            altitudeAccuracy: 0,
-            heading: 0,
-            speed: 0,
-          },
-          timestamp: Date.now(),
-        }
-
-        setLocation(defaultLocation)
-        fetchDisasters(defaultLocation.coords.latitude, defaultLocation.coords.longitude)
-        setLastRefreshTime(new Date())
-        startCountdownTimer()
-        setErrorMsg(t("location_error"))
+        // Error handling...
       }
     }
 
@@ -436,32 +563,8 @@ export default function HomeScreen() {
         longitude = 100.5018
       }
 
-      const [earthquakes, weatherAlerts, thailandAlerts, pdcAlerts, reliefWebAlerts] = await Promise.all([
-        preferences.earthquakeAlerts ? fetchEarthquakes(latitude, longitude) : [],
-        preferences.weatherAlerts ? fetchWeatherAlerts(latitude, longitude) : [],
-        fetchThailandDisasterAlerts(latitude, longitude),
-        fetchPDCDisasterAlerts(latitude, longitude),
-        fetchReliefWebAlerts(latitude, longitude),
-      ])
-
-      let allDisasters = [...earthquakes, ...weatherAlerts, ...thailandAlerts, ...pdcAlerts, ...reliefWebAlerts]
-
-      if (preferences.highSeverityOnly) {
-        allDisasters = allDisasters.filter((disaster) => disaster.severity === "high")
-      }
-
-      allDisasters.sort((a, b) => b.timestamp - a.timestamp)
-
-      const testAlerts = disasters.filter((d) => d.isTest)
-      const nonTestDisasters = allDisasters.filter((d) => !d.isTest)
-      allDisasters = [...testAlerts, ...nonTestDisasters]
-
-      setDisasters(allDisasters)
-      setLastRefetchTime(now)
-
-      if (preferences.notificationsEnabled) {
-        await sendNotificationsForNewAlerts(allDisasters)
-      }
+      await fetchDisastersContext(latitude, longitude)
+      setLastRefreshTime(new Date())
     } catch (error) {
       console.error("Error fetching disaster data:", error)
       if (disasters.length === 0) {

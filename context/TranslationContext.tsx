@@ -86,6 +86,7 @@ const enTranslations = {
   test_storm: "Test Storm Alert",
   test_info:
     "Test alerts are for demonstration purposes only and do not represent real emergency situations. They will be automatically removed when you restart the app.",
+
   location_error: "Unable to get your location. Using default location.",
   using_default_location: "Using default location (Bangkok).",
   map_error: "There was a problem loading the map. Please check your internet connection.",
@@ -103,7 +104,7 @@ const thTranslations = {
   never: "ไม่เคย",
   seconds_ago: " วินาทีที่แล้ว",
   minutes_ago: " นาทีที่แล้ว",
-  no_alerts: "ไม่มีการแจ้งเตือนที่ใช้งานอยู่ในพื้นที่ของคุณ",
+  no_alerts: "ไม���มีการแจ้งเตือนที่ใช้งานอยู่ในพื้นที่ของคุณ",
   pull_to_refresh: "ดึงลงเพื่อรีเฟรช",
   location_permission_denied: "การเข้าถึงตำแหน่งถูกปฏิเสธ",
   notif: "แจ้งเตือน",

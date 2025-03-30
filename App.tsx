@@ -7,7 +7,7 @@ import { StatusBar } from "expo-status-bar"
 import { SafeAreaProvider } from "react-native-safe-area-context"
 import * as SplashScreen from "expo-splash-screen"
 import * as Notifications from "expo-notifications"
-import { View, Text, Platform } from "react-native"
+import { View, Text, Platform, PermissionsAndroid } from "react-native"
 import * as TaskManager from "expo-task-manager"
 import * as BackgroundFetch from "expo-background-fetch"
 import HomeScreen from "./screens/HomeScreen"
@@ -22,7 +22,7 @@ import { DisasterProvider } from "./context/DisasterContext"
 import { PreferencesProvider } from "./context/PreferencesContext"
 import { TranslationProvider } from "./context/TranslationContext"
 import { setupNotificationChannels, requestNotificationPermissions } from "./utils/notificationHelper"
-
+import Geolocation from "@react-native-community/geolocation"
 SplashScreen.preventAutoHideAsync()
 
 Notifications.setNotificationHandler({
@@ -40,6 +40,15 @@ if (!TaskManager.isTaskDefined(BACKGROUND_FETCH_TASK)) {
   TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
     try {
       console.log("[Background Fetch] Task executed")
+
+      const locationPromise = new Promise((resolve) => {
+        Geolocation.getCurrentPosition(
+          (position) => resolve(position),
+          (error) => resolve(null),
+          { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 },
+        )
+      })
+
       return BackgroundFetch.BackgroundFetchResult.NewData
     } catch (error) {
       console.log("[Background Fetch] Error:", error)
@@ -63,13 +72,41 @@ const Stack = createNativeStackNavigator<RootStackParamList>()
 
 declare var ErrorUtils: any
 
+const requestLocationPermission = async () => {
+  if (Platform.OS === "android") {
+    try {
+      const granted = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, {
+        title: "Location Permission",
+        message: "This app needs access to your location to show relevant disaster alerts.",
+        buttonNeutral: "Ask Me Later",
+        buttonNegative: "Cancel",
+        buttonPositive: "OK",
+      })
+      return granted === PermissionsAndroid.RESULTS.GRANTED
+    } catch (err) {
+      console.warn(err)
+      return false
+    }
+  }
+  return true
+}
+
 export default function App() {
   const [appReady, setAppReady] = useState(false)
   const navigationRef = useRef(null)
+
   useEffect(() => {
     try {
       setupNotificationChannels()
       requestNotificationPermissions().catch((err) => console.log("Notification permission error:", err))
+      requestLocationPermission().catch((err) => console.log("Location permission error:", err))
+
+      Geolocation.setRNConfiguration({
+        skipPermissionRequests: false,
+        authorizationLevel: "whenInUse",
+        enableBackgroundLocationUpdates: false,
+      })
+
       const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
         try {
           const data = response.notification.request.content.data
